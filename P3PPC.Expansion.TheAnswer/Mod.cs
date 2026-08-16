@@ -1,4 +1,5 @@
-﻿using P3PPC.Expansion.TheAnswer.Template;
+﻿using P3PPC.Expansion.TheAnswer.Configuration;
+using P3PPC.Expansion.TheAnswer.Template;
 using Reloaded.Hooks.Definitions;
 using Reloaded.Hooks.Definitions.Enums;
 using Reloaded.Hooks.Definitions.X64;
@@ -6,6 +7,8 @@ using Reloaded.Memory.SigScan.ReloadedII.Interfaces;
 using Reloaded.Memory.Sources;
 using Reloaded.Mod.Interfaces;
 using IReloadedHooks = Reloaded.Hooks.ReloadedII.Interfaces.IReloadedHooks;
+using static P3PPC.Expansion.TheAnswer.Models.Personas;
+using static P3PPC.Expansion.TheAnswer.Models.BtlUnits;
 using CriFs.V2.Hook.Interfaces;
 using Reloaded.Universal.Localisation.Framework.Interfaces;
 using Reloaded.Memory;
@@ -44,36 +47,41 @@ namespace P3PPC.Expansion.TheAnswer
         private readonly IMod _owner;
 
         /// <summary>
+        /// Provides access to this mod's configuration.
+        /// </summary>
+        private Config _configuration;
+
+        /// <summary>
         /// The configuration of the currently executing mod.
         /// </summary>
         private readonly IModConfig _modConfig;
 
-        private Memory _memory;
+        private IMemory _memory;
 
-        private IAsmHook _setAkihikoKenBattleCombatInfoHook;
-        private IAsmHook _setAkihikoKenBattleAnimHook;
-        private IAsmHook _setAkihikoKenBattleBtlUnitHook;
-        private IAsmHook _setAkihikoKenBattleCharPosHook;
-        private IAsmHook _setAkihikoKenBattleSomeAIEventHook;
-        private IAsmHook _setAkihikoKenBattleBEDFileHook;
+        private IAsmHook _setAnswerBattlesCombatInfoHook;
+        private IAsmHook _setAnswerBattlesAnimHook;
+        private IAsmHook _setAnswerBattlesBtlUnitHook;
+        private IAsmHook _setAnswerBattlesCharPosHook;
+        private IAsmHook _setAnswerBattlesSomeAIEventHook;
+        private IAsmHook _setAnswerBattlesBEDFileHook;
         private IHook<PersonaBtlUnitDelegate> _setPersonaBtlUnitHook;
+        private IHook<MemorySetDelegate> _setMemorySetHook;
 
-        private IReverseWrapper<AkihikoKenBattleCombatInfoDelegate> _akihikoKenBattleCombatInfoReverseWrapper;
-        private IReverseWrapper<AkihikoKenBattleBEDFileDelegate> _akihikoKenBattleBEDFileReverseWrapper;
-        private IReverseWrapper<AkihikoKenBattleAnimDelegate> _akihikoKenBattleAnimReverseWrapper;
-        private IReverseWrapper<AkihikoKenBattleBtlUnitDelegate> _akihikoKenBattleBtlUnitReverseWrapper;
-
-        private TimeSpan movementDelay = TimeSpan.FromMilliseconds(100);
-        private TimeSpan movementInitialDelay = TimeSpan.FromMilliseconds(230);
+        private IReverseWrapper<AnswerBattlesCombatInfoDelegate> _answerBattlesCombatInfoReverseWrapper;
+        private IReverseWrapper<AnswerBattlesBEDFileDelegate> _answerBattlesBEDFileReverseWrapper;
+        private IReverseWrapper<AnswerBattlesAnimDelegate> _answerBattlesAnimReverseWrapper;
+        private IReverseWrapper<AnswerBattlesBtlUnitDelegate> _answerBattlesBtlUnitReverseWrapper;
+        private IReverseWrapper<MemorySetDelegate> _memorySetReverseWrapper;
 
         private uint _encounterID;
-        private int _btlUnit;
         private nint _param2;
+        private int _btlUnitInt;
         private int _setBtlUnit;
         private nint _btlUnitInfo;
         private int _param3;
-
-        private Language _language;
+        private Persona _personaUnit;
+        private BtlUnit _btlUnit;
+        private bool _btlUnitSet;
 
         public Mod(ModContext context)
         {
@@ -84,6 +92,8 @@ namespace P3PPC.Expansion.TheAnswer
             _modConfig = context.ModConfig;
 
             _memory = Memory.Instance;
+
+            Utils.Initialise(_logger, _configuration);
 
             var startupScannerController = _modLoader.GetController<IStartupScanner>();
             if (startupScannerController == null || !startupScannerController.TryGetTarget(out var startupScanner))
@@ -106,11 +116,7 @@ namespace P3PPC.Expansion.TheAnswer
                 return;
             }
 
-            if (!localisationFrameworkApi.TryGetLanguage(out _language))
-            {
-                Utils.LogError("Failed to get the language from localisation framework. Things might look funny...");
-                _language = Language.English;
-            }
+            string memorySetCall = _hooks.Utilities.GetAbsoluteJumpMnemonics(MemorySet, out _memorySetReverseWrapper);
 
             /*startupScanner.AddMainModuleScan("48 81 C1 58 83 00 00 48 8B 05 ?? ?? ?? ?? 48 89 88 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 81 48 ?? ?? ?? ?? ??", result =>
                 {
@@ -120,11 +126,11 @@ namespace P3PPC.Expansion.TheAnswer
                         "use64",
                         "add rcx, 0x8358",
                         "jmp combatInfoSet",
-                        $"{_hooks.Utilities.GetAbsoluteJumpMnemonics(AkihikoKenBattleCombatInfo, out _akihikoKenBattleCombatInfoReverseWrapper)}",
+                        $"{_hooks.Utilities.GetAbsoluteJumpMnemonics(AnswerBattlesCombatInfo, out _answerBattlesCombatInfoReverseWrapper)}",
                         "label combatInfoSet",
                         "mov rax, [qword 0x1408CD418]",
                     };
-                    _setAkihikoKenBattleCombatInfoHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
+                    _setAnswerBattlesCombatInfoHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
                 });*/
 
             /*startupScanner.AddMainModuleScan("48 8D 0D 57 FB 96 FC EB 29 48 8D 0D ?? ?? ?? ?? EB 20 48 8D 0D ?? ?? ?? ?? EB 17 E8 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ??", result =>
@@ -138,69 +144,85 @@ namespace P3PPC.Expansion.TheAnswer
                         "use64",
                         $"lea rcx, [qword {bedFilePtr}]",
                         "jmp endLabel",
-                        $"{_hooks.Utilities.GetAbsoluteJumpMnemonics(AkihikoKenBattleBEDFile, out _akihikoKenBattleBEDFileReverseWrapper)}",
+                        $"{_hooks.Utilities.GetAbsoluteJumpMnemonics(AnswerBattlesBEDFile, out _answerBattlesBEDFileReverseWrapper)}",
                         "label endLabel",
                         "mov edx, 1",
                     };
-                _setAkihikoKenBattleBEDFileHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
+                _setAnswerBattlesBEDFileHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
             });*/
 
-            startupScanner.AddMainModuleScan("66 3B C6 E9 ?? ?? ?? ?? 0F B7 4B 1E F6 C1 01 0F 84 ?? ?? ?? ??", result =>
+            startupScanner.AddMainModuleScan("48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B D9 48 8D 0D 6A BE 64 03 E8 6A 41 3F 00", result =>
             {
+                byte* memorySetAddress = (byte*)_memory.Allocate(4);
+                nint memorySetAddressPtr = _hooks.Utilities.WritePointer((nint)memorySetAddress);
+                *memorySetAddress = 1;
 
                 string[] function =
                 {
                         "use64",
-                        "cmp ax, si",
-                        "jmp endLabel",
-                        $"{_hooks.Utilities.GetAbsoluteJumpMnemonics(AkihikoKenBattleBtlUnit, out _akihikoKenBattleBtlUnitReverseWrapper)}",
-                        "label endLabel",
-                        "mov rbx, [rsp + 48]",
+                        "mov [rsp + 8], rbx",
+                        "mov [rsp + 16], rsi",
+                        "push rdi",
+                        "sub rsp, 32",
+                        "mov rbx, rcx",
+                        $"lea rcx, [qword {memorySetAddressPtr}]",
+                        $"{memorySetCall}",
+                        $"{_hooks.Utilities.GetAbsoluteJumpMnemonics(AnswerBattlesBtlUnit, out _answerBattlesBtlUnitReverseWrapper)}",
                     };
-                _setAkihikoKenBattleBtlUnitHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
+                _setAnswerBattlesBtlUnitHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
             });
 
             startupScanner.AddMainModuleScan("48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 48 89 CD 48 63 F2 48 8D 0D ?? ?? ?? ??", result =>
             {
 
-                if (!result.Found)
-                {
-                    Utils.LogError($"Unable to find PersonaBtlUnit, stuff won't work :(");
-                    return;
-                }
-                Utils.LogDebug($"Found PersonaBtlUnit at 0x{result.Offset + Utils.BaseAddress:X}");
-
                 _setPersonaBtlUnitHook = _hooks.CreateHook<PersonaBtlUnitDelegate>(PersonaBtlUnit, Utils.BaseAddress + result.Offset).Activate();
             });
 
-            startupScanner.AddMainModuleScan("48 83 C4 20 5F C3 80 BB A2 00 00 00 01 0F 85 8D 00 00 00", result =>
+            startupScanner.AddMainModuleScan("48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B D9 0F B7 FA 48 8D 0D F7 61 65 03 E8 F7 E4 3F 00", result =>
             {
+                byte* memorySetAddress = (byte*)_memory.Allocate(4);
+                nint memorySetAddressPtr = _hooks.Utilities.WritePointer((nint)memorySetAddress);
+                *memorySetAddress = 1;
 
                 string[] function =
                 {
                         "use64",
-                        "add rsp, 32",
-                        "pop rdi",
-                        "ret",
-                        $"{_hooks.Utilities.GetAbsoluteJumpMnemonics(AkihikoKenBattleAnim, out _akihikoKenBattleAnimReverseWrapper)}",
+                        "mov [rsp + 8], rbx",
+                        "mov [rsp + 16], rsi",
+                        "push rdi",
+                        "sub rsp, 32",
+                        "mov rbx, rcx",
+                        "movzx edi, dx",
+                        $"lea rcx, [qword {memorySetAddressPtr}]",
+                        $"{memorySetCall}",
+                        $"{_hooks.Utilities.GetAbsoluteJumpMnemonics(AnswerBattlesAnim, out _answerBattlesAnimReverseWrapper)}",
                     };
-                _setAkihikoKenBattleAnimHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
+                _setAnswerBattlesAnimHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
+            });
+
+            startupScanner.AddMainModuleScan("48 89 4C 24 08 48 83 EC 38 48 8B 44 24 40 48 89 44 24 20 48 8B 44 24 40 0F B6 00", result =>
+            {
+
+                _setMemorySetHook = _hooks.CreateHook<MemorySetDelegate>(MemorySet, Utils.BaseAddress + result.Offset).Activate();
             });
 
         }
 
-        /*private void AkihikoKenBattleCombatInfo(nint param1, uint encounterID)
+        /*private void AnswerBattlesCombatInfo(nint param1, uint encounterID)
         {
-            long combatInfoSetAddress = 0x1408CD408;
-            long combatInfoAddress = 0x1408CD418;
-            uint encounter = encounterID;
-            encounter = 446;
+            long* combatInfoSetAddress = (long*)_memory.Allocate(4);
+            nint combatInfoSetAddressPtr = _hooks.Utilities.WritePointer((nint)combatInfoSetAddress);
+            *combatInfoSetAddress = 0x1408CD408;
+            long* combatInfoAddress = (long*)_memory.Allocate(4);
+            nint combatInfoAddressPtr = _hooks.Utilities.WritePointer((nint)combatInfoAddress);
+            *combatInfoAddress = 0x1408CD418;
+            encounterID = 446;
             {
-            switch (encounter) {
+            switch (encounterID) {
                     case 446:
-                        _inAkihikoKenBattleCombatInfo = 0xfffeffff;
-                        _inAkihikoKenBattleCombatInfo = 0xfbffffff;
-                        _inAkihikoKenBattleCombatInfo = 1;
+                        combatInfoAddress + 12 = 0xfffeffff;
+                        (uint*)combatInfoAddress + 12 = 0xfbffffff;
+                        combatInfoAddress = 1;
                         (combatInfoAddress + 16) |= 2;
                         (combatInfoAddress + 16) |= 8;
                         (nint)combatInfoAddress + 16 |= 16;
@@ -210,7 +232,7 @@ namespace P3PPC.Expansion.TheAnswer
             }
         }*/
 
-        /*private void AkihikoKenBattleBEDFile(uint encounterID, string bedDirectory)
+        /*private void AnswerBattlesBEDFile(uint encounterID, string bedDirectory)
         {
             uint encounter = encounterID;
             encounter = 446;
@@ -224,86 +246,121 @@ namespace P3PPC.Expansion.TheAnswer
             }
         }*/
 
-        private void AkihikoKenBattleBtlUnit(nint param1)
+        private nint AnswerBattlesBtlUnit(nint param1)
         {
-            _encounterID = 446;
+            long* combatInfoAddress = (long*)_memory.Allocate(4);
+            nint combatInfoAddressPtr = _hooks.Utilities.WritePointer((nint)combatInfoAddress);
+            *combatInfoAddress = 0x1408CD418;
             {
-                switch (_encounterID)
+                switch (*(int*)*(nint*)(combatInfoAddressPtr + 4456) + 4)
                 {
-                    case 446:
-                        _param2 = (int)(param1 + 30);
-                        if ((_param2 & 1) == 0)
-                            return;
+                    case 416:
+                    case 431:
+                        if (((byte)(param1 + 30) & 1) == 0)
+                            return 1;
                         _btlUnitInfo = (param1 + 56);
                         if ((byte)(_btlUnitInfo + 162) != 1)
-                            return;
-                        _setBtlUnit = (int)(_btlUnitInfo + 164);
-                        _btlUnit = _setBtlUnit;
-                        if (_setBtlUnit >= 235 && _setBtlUnit <= 236)
-                        {
-                            _param2 = (int)(param1 + 30) | 0x210;
-                            _param3 = (int)(_btlUnitInfo + 3296);
-                            _param2 = (int)(_btlUnitInfo + 156) | 0x1C0;
-                            _param3 |= 0x40;
-                            _btlUnit = (int)(_btlUnitInfo + 164);
+                            return 1;
+                        _btlUnitInt = (int)(_btlUnitInfo + 164) - 243;
+                        _btlUnitSet = (int)(_btlUnitInfo + 164) == 243;
+                        goto BtlUnitSet;
+                    BtlUnitSet:
+                        if (!_btlUnitSet && _btlUnitInt != 13)
+                            return 1;
+                        *(int*)(_btlUnitInfo + 156) |= 0x540;
+                        return 1;
+                    case 446:
+                            _param2 = (int)(param1 + 30);
+                            if ((_param2 & 1) == 0)
+                                return 1;
+                            _btlUnitInfo = (param1 + 56);
+                            if ((byte)(_btlUnitInfo + 162) != 1)
+                                return 1;
+                            _btlUnit = (BtlUnit)(_btlUnitInfo + 164);
+                            if (_btlUnit >= BtlUnit.Akihiko && _btlUnit <= BtlUnit.Ken)
+                            {
+                                *(nint*)(param1 + 30) = _param2 | 0x210;
+                                _param3 = (int)(_btlUnitInfo + 3296);
+                                *(int*)(_btlUnitInfo + 156) |= 0x1C0;
+                                _param3 |= 0x40;
+                                _btlUnit = (BtlUnit)(_btlUnitInfo + 164);
+                            }
+                            if (_btlUnit == BtlUnit.Akihiko)
+                            {
+                                _setPersonaBtlUnitHook.OriginalFunction(_btlUnitInfo, Persona.Caesar);
+                                return 1;
+                            }
+                            else
+                            {
+                                if (_btlUnit != BtlUnit.Ken)
+                                    _setPersonaBtlUnitHook.OriginalFunction(_btlUnitInfo, Persona.KalaNemi);
+                                return 1;
+                            }
+                    default:
+                        return 0;
                         }
-                        if (_btlUnit == 235)
-                        {
-                            _setPersonaBtlUnitHook.OriginalFunction(_btlUnitInfo, 203);
-                            return;
-                        }
-                        else
-                        {
-                            if (_btlUnit != 236)
-                            _setPersonaBtlUnitHook.OriginalFunction(_btlUnitInfo, 205);
-                            return;
-                        }
-                }
             }
         }
 
-        private void PersonaBtlUnit(nint setBtlUnit, int personaID)
+        private void PersonaBtlUnit(nint setBtlUnit, Persona personaID)
         {
             _setPersonaBtlUnitHook.OriginalFunction(setBtlUnit, personaID);
         }
 
-        private void AkihikoKenBattleAnim(nint btlUnitInfo, uint animArray)
+        private nint AnswerBattlesAnim(nint btlUnitInfo, byte animArray)
         {
             long* animArrayAddress = (long*)_memory.Allocate(4);
             nint animArrayAddressPtr = _hooks.Utilities.WritePointer((nint)animArrayAddress);
             *animArrayAddress = 0x14071C390;
-            _encounterID = 446;
+            long* combatInfoAddress = (long*)_memory.Allocate(4);
+            nint combatInfoAddressPtr = _hooks.Utilities.WritePointer((nint)combatInfoAddress);
+            *combatInfoAddress = 0x1408CD418;
             {
-                switch (_encounterID)
+                switch (*(int*)*(nint*)(combatInfoAddressPtr + 4456) + 4)
                 {
+                    case 416:
+                    case 431:
+                        if ((byte)(btlUnitInfo + 162) != 1 || (BtlUnit)(btlUnitInfo + 164) != BtlUnit.PriestessRematch && (BtlUnit)(btlUnitInfo + 164) != BtlUnit.Priestess)
+                        {
+                            return -1;
+                        }
+                        return animArrayAddressPtr = animArray;
                     case 446:
                         if ((byte)(btlUnitInfo + 162) != 1)
-                            return;
-                        if ((int)(btlUnitInfo + 164) == 235)
-                            return;
-                            animArrayAddressPtr = (nint)(animArray);
-                        if ((int)(btlUnitInfo + 164) != 236)
-                            return;
-                        animArrayAddressPtr = (nint)(animArray + 28);
-                        return;
+                            return -1;
+                        if ((BtlUnit)(btlUnitInfo + 164) == BtlUnit.Akihiko)
+                            return animArrayAddressPtr = animArray;
+                        if ((BtlUnit)(btlUnitInfo + 164) != BtlUnit.Ken)
+                            return -1;
+                        return animArrayAddressPtr = (animArray + 28);
+                    default:
+                        return 0;
                 }
             }
         }
 
-        [Function(CallingConventions.Microsoft)]
-        private delegate void AkihikoKenBattleCombatInfoDelegate(nint param1, uint encounterID);
+        private void MemorySet(byte* address)
+        {
+            _setMemorySetHook.OriginalFunction(address);
+        }
 
         [Function(CallingConventions.Microsoft)]
-        private delegate void AkihikoKenBattleBEDFileDelegate(uint encounterID, string bedDirectory);
+        private delegate void AnswerBattlesCombatInfoDelegate(nint param1, uint encounterID);
 
         [Function(CallingConventions.Microsoft)]
-        private delegate void AkihikoKenBattleAnimDelegate(nint btlUnitInfo, uint animArray);
+        private delegate void AnswerBattlesBEDFileDelegate(uint encounterID, string bedDirectory);
 
         [Function(CallingConventions.Microsoft)]
-        private delegate void AkihikoKenBattleBtlUnitDelegate(nint param1);
+        private delegate nint AnswerBattlesAnimDelegate(nint btlUnitInfo, byte animArray);
 
         [Function(CallingConventions.Microsoft)]
-        private delegate void PersonaBtlUnitDelegate(nint setBtlUnit, int personaID);
+        private delegate nint AnswerBattlesBtlUnitDelegate(nint param1);
+
+        [Function(CallingConventions.Microsoft)]
+        private delegate void PersonaBtlUnitDelegate(nint setBtlUnit, Persona personaID);
+
+        [Function(CallingConventions.Microsoft)]
+        private delegate void MemorySetDelegate(byte* address);
 
         #region Standard Overrides
         #endregion
