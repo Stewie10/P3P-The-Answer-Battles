@@ -16,6 +16,8 @@ namespace P3PPC.Expansion.TheAnswer.Models
             StatueRematch = 213,
             Statue2Rematch = 214,
             Statue3Rematch = 215,
+            HangedManDeviousMayaRematch = 216,
+            HangedManDeviousMaya2Rematch = 217,
             CowardlyMayaRooftop = 224,
             CowardlyMayaRooftop2 = 225,
             FortuneWheelofFortuneBuffDebuffs = 226,

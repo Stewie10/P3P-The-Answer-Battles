@@ -13,10 +13,10 @@ using CriFs.V2.Hook.Interfaces;
 using Reloaded.Universal.Localisation.Framework.Interfaces;
 using Reloaded.Memory;
 using System.Security.Cryptography.X509Certificates;
-using static P3PPC.Expansion.TheAnswer.InternalUtils;
-using static P3PPC.Expansion.TheAnswer.Anim;
 using System.Drawing;
 using System.ComponentModel.Design;
+using System.Collections;
+using System.Collections.Specialized;
 
 namespace P3PPC.Expansion.TheAnswer
 {
@@ -66,6 +66,9 @@ namespace P3PPC.Expansion.TheAnswer
         private IAsmHook _setAnswerBattlesBEDFileHook;
         private IHook<PersonaBtlUnitDelegate> _setPersonaBtlUnitHook;
         private IHook<MemorySetDelegate> _setMemorySetHook;
+        private IHook<HermitChargeDelegate> _setHermitChargeHook;
+        private IHook<HangedManAnimSetDelegate> _setHangedManAnimSetHook;
+        private IHook<NyxAvatarAnimSetDelegate> _setNyxAvatarAnimSetHook;
 
         private IReverseWrapper<AnswerBattlesCombatInfoDelegate> _answerBattlesCombatInfoReverseWrapper;
         private IReverseWrapper<AnswerBattlesBEDFileDelegate> _answerBattlesBEDFileReverseWrapper;
@@ -76,12 +79,15 @@ namespace P3PPC.Expansion.TheAnswer
         private uint _encounterID;
         private nint _param2;
         private int _btlUnitInt;
-        private int _setBtlUnit;
         private nint _btlUnitInfo;
         private int _param3;
         private Persona _personaUnit;
         private BtlUnit _btlUnit;
+        private int _btlUnitHermit;
         private bool _btlUnitSet;
+        private bool _animArrayCharge;
+        private nint _hermitChargeParam4;
+        private nint _combatInfoAddressNyxAvatar;
 
         public Mod(ModContext context)
         {
@@ -108,15 +114,6 @@ namespace P3PPC.Expansion.TheAnswer
                 Utils.LogError($"Unable to get controller for CriFs Lib, things will not work :(");
                 return;
             }
-
-            var localisationFrameworkController = _modLoader.GetController<ILocalisationFramework>();
-            if (localisationFrameworkController == null || !localisationFrameworkController.TryGetTarget(out var localisationFrameworkApi))
-            {
-                Utils.LogError($"Unable to get controller for Localisation Framework, things will not work :(");
-                return;
-            }
-
-            string memorySetCall = _hooks.Utilities.GetAbsoluteJumpMnemonics(MemorySet, out _memorySetReverseWrapper);
 
             /*startupScanner.AddMainModuleScan("48 81 C1 58 83 00 00 48 8B 05 ?? ?? ?? ?? 48 89 88 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 81 48 ?? ?? ?? ?? ??", result =>
                 {
@@ -151,7 +148,7 @@ namespace P3PPC.Expansion.TheAnswer
                 _setAnswerBattlesBEDFileHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
             });*/
 
-            startupScanner.AddMainModuleScan("48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B D9 48 8D 0D 6A BE 64 03 E8 6A 41 3F 00", result =>
+            /*startupScanner.AddMainModuleScan("48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B D9 48 8D 0D 6A BE 64 03 E8 6A 41 3F 00", result =>
             {
                 byte* memorySetAddress = (byte*)_memory.Allocate(4);
                 nint memorySetAddressPtr = _hooks.Utilities.WritePointer((nint)memorySetAddress);
@@ -165,12 +162,10 @@ namespace P3PPC.Expansion.TheAnswer
                         "push rdi",
                         "sub rsp, 32",
                         "mov rbx, rcx",
-                        $"lea rcx, [qword {memorySetAddressPtr}]",
-                        $"{memorySetCall}",
                         $"{_hooks.Utilities.GetAbsoluteJumpMnemonics(AnswerBattlesBtlUnit, out _answerBattlesBtlUnitReverseWrapper)}",
                     };
                 _setAnswerBattlesBtlUnitHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
-            });
+            });*/
 
             startupScanner.AddMainModuleScan("48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 48 89 CD 48 63 F2 48 8D 0D ?? ?? ?? ??", result =>
             {
@@ -178,32 +173,39 @@ namespace P3PPC.Expansion.TheAnswer
                 _setPersonaBtlUnitHook = _hooks.CreateHook<PersonaBtlUnitDelegate>(PersonaBtlUnit, Utils.BaseAddress + result.Offset).Activate();
             });
 
-            startupScanner.AddMainModuleScan("48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B D9 0F B7 FA 48 8D 0D F7 61 65 03 E8 F7 E4 3F 00", result =>
+            startupScanner.AddMainModuleScan("48 8B 15 C0 95 8A 00 48 8B 82 68 11 00 00 44 0F B7 40 ?? 41 8D 80 ?? ?? ?? ?? 83 F8 27 0F 87 ?? ?? ?? ??", result =>
             {
-                byte* memorySetAddress = (byte*)_memory.Allocate(4);
-                nint memorySetAddressPtr = _hooks.Utilities.WritePointer((nint)memorySetAddress);
-                *memorySetAddress = 1;
 
                 string[] function =
                 {
                         "use64",
-                        "mov [rsp + 8], rbx",
-                        "mov [rsp + 16], rsi",
-                        "push rdi",
-                        "sub rsp, 32",
-                        "mov rbx, rcx",
-                        "movzx edi, dx",
-                        $"lea rcx, [qword {memorySetAddressPtr}]",
-                        $"{memorySetCall}",
                         $"{_hooks.Utilities.GetAbsoluteJumpMnemonics(AnswerBattlesAnim, out _answerBattlesAnimReverseWrapper)}",
                     };
-                _setAnswerBattlesAnimHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.ExecuteFirst).Activate();
+                _setAnswerBattlesAnimHook = _hooks.CreateAsmHook(function, result.Offset + Utils.BaseAddress, AsmHookBehaviour.DoNotExecuteOriginal).Activate();
             });
 
             startupScanner.AddMainModuleScan("48 89 4C 24 08 48 83 EC 38 48 8B 44 24 40 48 89 44 24 20 48 8B 44 24 40 0F B6 00", result =>
             {
 
                 _setMemorySetHook = _hooks.CreateHook<MemorySetDelegate>(MemorySet, Utils.BaseAddress + result.Offset).Activate();
+            });
+
+            startupScanner.AddMainModuleScan("48 83 EC 28 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 48 8B 81 ?? ?? ?? ?? 0F B7 50 10 B8 A5 01 00 00", result =>
+            {
+
+                _setHermitChargeHook = _hooks.CreateHook<HermitChargeDelegate>(HermitCharge, Utils.BaseAddress + result.Offset).Activate();
+            });
+
+            startupScanner.AddMainModuleScan("48 89 5C 24 ?? 57 48 83 EC 20 48 89 CB 89 D7 48 8D 0D D3 10 C6 FB E8 ?? ?? ?? ?? 85 7B 0C B8 ?? ?? ?? ?? 48 8B 5C 24 ?? 0F 95 D0 48 83 C4 20 5F", result =>
+            {
+
+                _setHangedManAnimSetHook = _hooks.CreateHook<HangedManAnimSetDelegate>(HangedManAnimSet, Utils.BaseAddress + result.Offset).Activate();
+            });
+
+            startupScanner.AddMainModuleScan("48 89 5C 24 ?? 57 48 83 EC 20 48 89 CF 0F B6 DA 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 80 FB 16 72 14", result =>
+            {
+
+                _setNyxAvatarAnimSetHook = _hooks.CreateHook<NyxAvatarAnimSetDelegate>(NyxAvatarAnimSet, Utils.BaseAddress + result.Offset).Activate();
             });
 
         }
@@ -246,7 +248,7 @@ namespace P3PPC.Expansion.TheAnswer
             }
         }*/
 
-        private nint AnswerBattlesBtlUnit(nint param1)
+        /*private nint AnswerBattlesBtlUnit(nint param1)
         {
             long* combatInfoAddress = (long*)_memory.Allocate(4);
             nint combatInfoAddressPtr = _hooks.Utilities.WritePointer((nint)combatInfoAddress);
@@ -300,23 +302,23 @@ namespace P3PPC.Expansion.TheAnswer
                         return 0;
                         }
             }
-        }
+        }*/
 
         private void PersonaBtlUnit(nint setBtlUnit, Persona personaID)
         {
             _setPersonaBtlUnitHook.OriginalFunction(setBtlUnit, personaID);
         }
 
-        private nint AnswerBattlesAnim(nint btlUnitInfo, byte animArray)
+        private nint AnswerBattlesAnim(nint btlUnitInfo, ushort animArraySet)
         {
-            long* animArrayAddress = (long*)_memory.Allocate(4);
-            nint animArrayAddressPtr = _hooks.Utilities.WritePointer((nint)animArrayAddress);
-            *animArrayAddress = 0x14071C390;
-            long* combatInfoAddress = (long*)_memory.Allocate(4);
-            nint combatInfoAddressPtr = _hooks.Utilities.WritePointer((nint)combatInfoAddress);
-            *combatInfoAddress = 0x1408CD418;
+            uint animArray = animArraySet;
+            long combatInfoAddress = 0x1408CD418;
+            nint encounter = *(int*)*(long*)(combatInfoAddress + 4456) + 16;
+            nint result;
+            int param1 = 521;
+            _combatInfoAddressNyxAvatar = (nint)combatInfoAddress;
             {
-                switch (*(int*)*(nint*)(combatInfoAddressPtr + 4456) + 4)
+                switch (encounter)
                 {
                     case 416:
                     case 431:
@@ -324,24 +326,234 @@ namespace P3PPC.Expansion.TheAnswer
                         {
                             return -1;
                         }
-                        return animArrayAddressPtr = animArray;
-                    case 446:
+                        return ((byte*)0x14071C390)[animArray];
+                    case 417:
+                    case 432:
+                        if ((byte)(btlUnitInfo + 162) != 1)
+                            return -1;
+                        if ((BtlUnit)(btlUnitInfo + 164) == BtlUnit.EmpressRematch)
+                            return ((byte*)0x14071C390)[animArray];
+                        if ((BtlUnit)(btlUnitInfo + 164) == BtlUnit.EmperorRematch)
+                            return ((byte*)0x14071C390)[animArray + 28];
+                        if ((BtlUnit)(btlUnitInfo + 164) != BtlUnit.Empress)
+                        {
+                            if ((BtlUnit)(btlUnitInfo + 164) != BtlUnit.Emperor)
+                                return -1;
+                            return ((byte*)0x14071C390)[animArray + 28];
+                        }
+                        return ((byte*)0x14071C390)[animArray];
+                    case 418:
+                    case 433:
+                        if ((byte)(btlUnitInfo + 162) != 1 || (BtlUnit)(btlUnitInfo + 164) != BtlUnit.HierophantRematch && (BtlUnit)(btlUnitInfo + 164) != BtlUnit.Hierophant)
+                        {
+                            return -1;
+                        }
+                        return ((byte*)0x14071C390)[animArray + 32];
+                    case 419:
+                    case 434:
+                        if ((byte)(btlUnitInfo + 162) != 1)
+                            return -1;
+                        _btlUnit = (BtlUnit)(btlUnitInfo + 164);
+                        if (_btlUnit != BtlUnit.Lovers && _btlUnit != BtlUnit.LoversRematch)
+                            return -1;
+                        return ((byte*)0x14071C390)[animArray + 64];
+                    case 420:
+                    case 435:
+                        if ((byte)(btlUnitInfo + 162) != 1)
+                            return -1;
+                        switch ((BtlUnit)(btlUnitInfo + 164))
+                        {
+                            case BtlUnit.ChariotRematch:
+                            case BtlUnit.Chariot:
+                                result = ((byte*)0x14071C390)[animArray + 96];
+                                break;
+                            case BtlUnit.JusticeRematch:
+                            case BtlUnit.Justice:
+                                result = ((byte*)0x14071C390)[animArray + 124];
+                                break;
+                            case BtlUnit.ChariotJusticeRematchDummy:
+                            case BtlUnit.ChariotJusticeDummy:
+                                result = ((byte*)0x14071C390)[animArray + 152];
+                                break;
+                            default:
+                                return -1;
+                        }
+                        return result;
+                    case 421:
+                    case 436:
+                        if ((byte)(btlUnitInfo + 162) != 1)
+                            return -1;
+                        _btlUnit = (BtlUnit)(btlUnitInfo + 164);
+                        _btlUnitHermit = 263;
+                        if (_btlUnit != BtlUnit.Hermit)
+                        {
+                            _btlUnitHermit = 250;
+                            if (_btlUnit != BtlUnit.HermitRematch)
+                                return -1;
+                        }
+                        if (*(bool*)animArray == true || animArray == 3 || animArray == 17 && encounter == 421 || encounter == 436 && (*(bool*)(combatInfoAddress + 4264) == true))
+                        {
+                            *(int*)(combatInfoAddress + 4272) = 1;
+                            return 15;
+                        }
+                        else
+                        {
+                            if (!_setHermitChargeHook.OriginalFunction(_btlUnitHermit, combatInfoAddress, (int)encounter, _hermitChargeParam4))
+                                *(int*)(combatInfoAddress + 4272) = 0;
+                            return ((byte*)0x14071C390)[animArray + 184];
+                        }
+                    case 422:
+                    case 437:
+                        if ((byte)(btlUnitInfo + 162) != 1)
+                            return -1;
+                        switch ((BtlUnit)(btlUnitInfo + 164))
+                        {
+                            case BtlUnit.FortuneRematch:
+                            case BtlUnit.Fortune:
+                                if (((ushort)animArray <= 9 && (BitTest(param1, animArray)) || animArray == 17) && *(int*)(combatInfoAddress + 4288) == 1)
+                                {
+                                    result = 6;
+                                }
+                                else
+                                {
+                                    result = ((byte*)0x14071C390)[animArray + 216];
+                                }
+                                break;
+                            case BtlUnit.StrengthRematch:
+                            case BtlUnit.Strength:
+                                result = ((byte*)0x14071C390)[animArray + 244];
+                                break;
+                            default:
+                                return -1;
+                        }
+                        return result;
+                    case 423:
+                        if ((byte)(btlUnitInfo + 162) != 1)
+                            return -1;
+                        if ((BtlUnit)(btlUnitInfo + 164) == BtlUnit.Takaya)
+                            return ((byte*)0x14071C390)[animArray];
+                        if ((BtlUnit)(btlUnitInfo + 164) != BtlUnit.Jin)
+                            return -1;
+                        return ((byte*)0x14071C390)[animArray + 28];
+                    case 424:
+                    case 438:
+                        if ((byte)(btlUnitInfo + 162) != 1)
+                            return -1;
+                        switch ((BtlUnit)(btlUnitInfo + 164))
+                        {
+                            case BtlUnit.StatueRematch:
+                            case BtlUnit.Statue2Rematch:
+                            case BtlUnit.Statue3Rematch:
+                            case BtlUnit.Statue:
+                            case BtlUnit.Statue2:
+                            case BtlUnit.Statue3:
+                                result = ((byte*)0x14071C390)[animArray + 120];
+                                break;
+                            case BtlUnit.HangedManDeviousMayaRematch:
+                            case BtlUnit.HangedManDeviousMaya2Rematch:
+                            case BtlUnit.HangedManDeviousMaya:
+                            case BtlUnit.HangedManDeviousMaya2:
+                                if (animArray == 3 && _setHangedManAnimSetHook.OriginalFunction((btlUnitInfo + 3296), 2048))
+                                    return 15;
+                                result = ((byte*)0x14071C390)[animArray + 148];
+                                break;
+                            case BtlUnit.HangedManRematch:
+                            case BtlUnit.HangedMan:
+                                if (*(bool*)(combatInfoAddress + 4292) == true)
+                                    result = ((byte*)0x14071C390)[animArray + 92];
+                                else
+                                    result = ((byte*)0x14071C390)[animArray + 64];
+                                break;
+                            default:
+                                return -1;
+                        }
+                        return result;
+                    case 425:
+                        if ((byte)(btlUnitInfo + 162) != 1 || (BtlUnit)(btlUnitInfo + 164) != BtlUnit.Chidori)
+                            return -1;
+                        return ((byte*)0x14071C390)[animArray];
+                    case 426:
+                        if ((byte)(btlUnitInfo + 162) != 1 || (BtlUnit)(btlUnitInfo + 164) != BtlUnit.Jin2)
+                            return -1;
+                        return ((byte*)0x14071C390)[animArray + 32];
+                    case 427:
+                        if ((byte)(btlUnitInfo + 162) != 1 || (BtlUnit)(btlUnitInfo + 164) != BtlUnit.Takaya2)
+                            return -1;
+                        return ((byte*)0x14071C390)[animArray + 64];
+                    case 428:
+                        if ((byte)(btlUnitInfo + 162) != 1)
+                            return -1;
+                        if (*(bool*)animArray == true || animArray == 3 || animArray == 17 && *(byte*)_combatInfoAddressNyxAvatar == 11 || (_setNyxAvatarAnimSetHook.OriginalFunction((btlUnitInfo + 3296), _combatInfoAddressNyxAvatar) > 0))
+                        {
+                            *(int*)(combatInfoAddress + 4280) = 1;
+                            return 15;
+                        }
+                        else
+                        {
+                            *(byte*)_combatInfoAddressNyxAvatar = 11;
+                            if (_setNyxAvatarAnimSetHook.OriginalFunction(btlUnitInfo + 3296, _combatInfoAddressNyxAvatar) >= 0)
+                                *(int*)(combatInfoAddress + 4280) = 0;
+                            return ((byte*)0x14071C390)[animArray + 96];
+                        }
+                    case 429:
+                        if ((byte)(btlUnitInfo + 162) != 1 || (BtlUnit)(btlUnitInfo + 164) != BtlUnit.Nyx)
+                            return -1;
+                        return ((byte*)0x14071C390)[animArray];
+                    case 430:
+                        if ((byte)(btlUnitInfo + 162) != 1 || (BtlUnit)(btlUnitInfo + 164) != BtlUnit.Elizabeth)
+                            return -1;
+                        return ((byte*)0x14071C390)[animArray];
+                    /*case 446:
                         if ((byte)(btlUnitInfo + 162) != 1)
                             return -1;
                         if ((BtlUnit)(btlUnitInfo + 164) == BtlUnit.Akihiko)
-                            return animArrayAddressPtr = animArray;
+                            return ((byte*)0x14071C390)[animArray];
                         if ((BtlUnit)(btlUnitInfo + 164) != BtlUnit.Ken)
                             return -1;
-                        return animArrayAddressPtr = (animArray + 28);
+                        return ((byte*)0x14071C390)[animArray + 28];*/
+                    case 453:
+                        if ((byte)(btlUnitInfo + 162) != 1 || (BtlUnit)(btlUnitInfo + 164) != BtlUnit.Margaret)
+                            return -1;
+                        return ((byte*)0x14071C390)[animArray + 64];
+                    case 454:
+                        if ((byte)(btlUnitInfo + 162) != 1 || (BtlUnit)(btlUnitInfo + 164) != BtlUnit.Magician)
+                            return -1;
+                        return ((byte*)0x14071C390)[animArray];
+                    case 455:
+                        if ((byte)(btlUnitInfo + 162) != 1 || (BtlUnit)(btlUnitInfo + 164) != BtlUnit.Teo)
+                            return -1;
+                        return ((byte*)0x14071C390)[animArray + 32];
                     default:
-                        return 0;
+                        return -1;
                 }
             }
+        }
+        private bool HermitCharge(int btlUnit, long combatInfoAddress, nint encounter, nint param4)
+        {
+            _setHermitChargeHook.OriginalFunction(btlUnit, combatInfoAddress, encounter, param4);
+            return true;
         }
 
         private void MemorySet(byte* address)
         {
             _setMemorySetHook.OriginalFunction(address);
+        }
+
+        private bool BitTest(int param1, uint param2)
+        {
+            return true;
+        }
+
+        private bool HangedManAnimSet(nint btlUnitInfo, int param2)
+        {
+            _setHangedManAnimSetHook.OriginalFunction(btlUnitInfo, param2);
+            return true;
+        }
+
+        private char NyxAvatarAnimSet(nint btlUnitInfo, nint param2)
+        {
+            _setNyxAvatarAnimSetHook.OriginalFunction(btlUnitInfo, param2);
+            return (char)1;
         }
 
         [Function(CallingConventions.Microsoft)]
@@ -351,7 +563,7 @@ namespace P3PPC.Expansion.TheAnswer
         private delegate void AnswerBattlesBEDFileDelegate(uint encounterID, string bedDirectory);
 
         [Function(CallingConventions.Microsoft)]
-        private delegate nint AnswerBattlesAnimDelegate(nint btlUnitInfo, byte animArray);
+        private delegate nint AnswerBattlesAnimDelegate(nint btlUnitInfo, ushort animArray);
 
         [Function(CallingConventions.Microsoft)]
         private delegate nint AnswerBattlesBtlUnitDelegate(nint param1);
@@ -361,6 +573,15 @@ namespace P3PPC.Expansion.TheAnswer
 
         [Function(CallingConventions.Microsoft)]
         private delegate void MemorySetDelegate(byte* address);
+
+        [Function(CallingConventions.Microsoft)]
+        private delegate bool HermitChargeDelegate(int btlUnit, long combatInfoAddress, nint encounter, nint param4);
+
+        [Function(CallingConventions.Microsoft)]
+        private delegate bool HangedManAnimSetDelegate(nint btlUnitInfo, int param2);
+
+        [Function(CallingConventions.Microsoft)]
+        private delegate char NyxAvatarAnimSetDelegate(nint btlUnitInfo, nint param2);
 
         #region Standard Overrides
         #endregion
