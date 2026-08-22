@@ -6,11 +6,11 @@ using System.Threading.Tasks;
 
 namespace P3PPC.Expansion.TheAnswer.Models
 {
-    internal class BtlUnits
+    public class BtlUnits
     {
         public enum BtlUnit : short
         {
-            None = -1,
+            None = 0,
             PriestessMutteringTiaraRematch = 211,
             PriestessMutteringTiara2Rematch = 212,
             StatueRematch = 213,

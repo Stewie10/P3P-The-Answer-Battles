@@ -1,10 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0-windows</TargetFramework>
+    <TargetFramework>net9.0-windows7.0</TargetFramework>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <LangVersion>10.0</LangVersion>
+    <LangVersion>13.0</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <OutputPath>$(RELOADEDIIMODS)/P3PPC.Expansion.TheAnswer</OutputPath>
@@ -40,13 +40,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Reloaded.Hooks.Definitions" Version="1.11.0" />
-    <PackageReference Include="Reloaded.Memory" Version="8.0.1" />
+    <PackageReference Include="Reloaded.Hooks.Definitions" Version="1.15.0" />
+    <PackageReference Include="Reloaded.Memory" Version="9.4.3" />
     <PackageReference Include="Reloaded.Memory.Sigscan.Definitions" Version="1.1.1" />
     <PackageReference Include="Reloaded.Memory.SigScan.ReloadedII.Interfaces" Version="1.2.0" />
-    <PackageReference Include="Reloaded.Mod.Interfaces" Version="2.3.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Reloaded.Mod.Interfaces" Version="2.5.0" ExcludeAssets="runtime" />
     <PackageReference Include="Reloaded.SharedLib.Hooks" Version="1.9.0" />
     <PackageReference Include="Reloaded.Universal.Localisation.Framework.Interfaces" Version="1.0.0" />
+    <PackageReference Include="RyoTune.Reloaded" Version="4.2.1" />
+    <PackageReference Include="SharedScans.Interfaces" Version="1.2.0" />
   </ItemGroup>
 
   <ItemGroup>

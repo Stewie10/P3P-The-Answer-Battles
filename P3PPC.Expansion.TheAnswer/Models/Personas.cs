@@ -6,11 +6,11 @@ using System.Threading.Tasks;
 
 namespace P3PPC.Expansion.TheAnswer.Models
 {
-    internal class Personas
+    public class Personas
     {
         public enum Persona : short
         {
-            None = -1,
+            None = 0,
             Orpheus = 1,
             OrpheusF = 174,
             Universe = 191,
